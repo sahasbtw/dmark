@@ -1,0 +1,50 @@
+#!/bin/sh
+#
+# Author: sahasbtw
+#
+# Give a markdown file to the variable $file, with links and categories.
+# Bookmarks across all programms!
+#
+# Bind a keyboard shortcut to execute this script with no arguments to
+# show bookmarks. And with the flag `-a` to add bookmarks to a category
+# from clipboard.
+#
+# e.g :- ./dmark		Super + b 			Show bookmarks
+#        ./dmark -a 	Ctrl + Shift + m	Add bookmarks
+
+name="dmark"
+file="/home/sahas/notes/misc/bookmarks.md"
+categories=$(sed -n 's/^### //p' $file)
+
+add_bookmarks() {
+	link="$(xclip -o -selection clipboard | grep -oEo '.*://[^[:space:]]*' | sort -u)"
+	[ -z "$link" ] && notify-send "$name" "No links found in the clipboard" && exit 0
+
+	grep -o "$link" "$file" && notify-send "$name" "Link already bookmarked before" && exit 0
+
+	choosen=$(echo "$categories" | dmenu -w "$WINDOWID" -p "Catagory:")
+	[ -z "$choosen" ] && exit 0
+	
+	awk -v cat="$choosen" -v link="$link" 'BEGIN{ h="^### " cat "$" } $0 ~ h {i=1;print;next} i && /^$/ {print link;i=0} i {print;next} {print} END { if(i) print link }' "$file" \
+		>> /tmp/tmp_bookmarks && mv /tmp/tmp_bookmarks "$file" &&  \
+		notify-send -u low -i bookmark-new-symbolic "Bookmark Added..!" "$choosen | $link"
+}
+
+show_bookmarks() {
+	choosen=$(echo "All\n$categories" | dmenu -w "$WINDOWID" -p "Catagory:")
+	[ -z "$choosen" ] && exit 0
+
+	[ "All" = "$choosen" ] && bookmarks=$(grep -oEo '^.*://[^[:space:]]*' "$file") || \
+		bookmarks=$(awk -v cat="$choosen" 'BEGIN{ h="^### " cat "$" } $0 ~ h {i=1;next} i && /^$/ {exit} i {print;next}' "$file")
+
+	paste=$(echo "$bookmarks" | dmenu -w "$WINDOWID" -p "Paste:")
+	[ -z "$paste" ] && exit 0 || xdotool type --delay 0 --window "$WINDOWID" "$paste"
+}
+
+[ $# -eq 0 ] && show_bookmarks
+
+while getopts "ha" o; do case "${o}" in
+	h) echo	"Usage:\t"$name" to open a dmenu prompt of bookmarks\n\t"$name" -a <link> to add a bookmark" ;;
+	a) add_bookmarks	;;
+	*) printf "Invalid option: -%s\\n" "$OPTARG" && exit 1 ;;
+esac done
